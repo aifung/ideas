@@ -459,27 +459,60 @@ if __name__ == '__main__':
 ### 4. Redis 資料結構設計
 
 ```mermaid
-graph LR
-    subgraph Redis Keys
-        A[dedup:call_123<br/>Set類型]
-        B[transcript:call_123<br/>List類型]
-        C[transcript:call_123:meta<br/>Hash類型]
-        D[intent:call_123<br/>String類型]
+graph TB
+    subgraph "Redis Keys - Session: call_123"
+        direction TB
+        
+        subgraph "Set 類型 - 去重"
+            Dedup["dedup:call_123"]
+            Dedup --> D1["member: segment_id: 1"]
+            Dedup --> D2["member: segment_id: 2"]
+            Dedup --> D3["member: segment_id: 3"]
+            Dedup --> D4["member: segment_id: 4"]
+            Dedup --> D5["member: segment_id: 5"]
+        end
+        
+        subgraph "List 類型 - 順序儲存"
+            List["transcript:call_123"]
+            List --> L1["index 0: {segment 1 data}"]
+            List --> L2["index 1: {segment 2 data}"]
+            List --> L3["index 2: {segment 3 data}"]
+            List --> L4["index 3: {segment 4 data}"]
+            List --> L5["index 4: {segment 5 data}"]
+        end
+        
+        subgraph "Hash 類型 - 通話中繼資料"
+            Meta["transcript:call_123:meta"]
+            Meta --> M1["field: start_time<br/>value: '10:30:05'"]
+            Meta --> M2["field: end_time<br/>value: '10:35:22'"]
+            Meta --> M3["field: status<br/>value: 'completed'"]
+            Meta --> M4["field: channel<br/>value: '客服部'"]
+            Meta --> M5["field: agent_id<br/>value: 'agent_456'"]
+        end
+        
+        subgraph "String 類型 - 快取結果"
+            Intent["intent:call_123"]
+            Intent --> I1["value: {
+                'intent': 'check_balance',
+                'confidence': 0.95,
+                'entities': {'account': 'savings'},
+                'timestamp': '2024-01-15T10:35:30Z'
+            }"]
+        end
     end
     
-    A --> A1[segment_id: 1]
-    A --> A2[segment_id: 2]
-    A --> A3[segment_id: 3]
+    subgraph "Segment 資料範例"
+        Segment["segment JSON 結構"]
+        Segment --> S1["segment_id: 3"]
+        Segment --> S2["text: '我想查詢戶口結餘'"]
+        Segment --> S3["timestamp: '2024-01-15T10:30:08Z'"]
+        Segment --> S4["is_final: false"]
+    end
     
-    B --> B1["[0] {segment 1 data}"]
-    B --> B2["[1] {segment 2 data}"]
-    B --> B3["[2] {segment 3 data}"]
-    
-    C --> C1[start_time: 10:30:05]
-    C --> C2[status: in_progress]
-    C --> C3[channel: 客服部]
-    
-    D --> D1[{intent: check_balance, confidence: 0.95}]
+    style Dedup fill:#f9f,stroke:#333,stroke-width:2px
+    style List fill:#9cf,stroke:#333,stroke-width:2px
+    style Meta fill:#fc3,stroke:#333,stroke-width:2px
+    style Intent fill:#6c9,stroke:#333,stroke-width:2px
 ```
 
 | Key 格式 | 類型 | 用途 | 過期時間 |
