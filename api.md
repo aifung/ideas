@@ -88,83 +88,82 @@ graph TB
         
         subgraph "AWS ECS Cluster"
             direction TB
-            subgraph "ECS Service - 接收伺服器"
-                Server1[Task 1<br/>Flask + WebSocket]
-                Server2[Task 2<br/>Flask + WebSocket]
-                Server3[Task 3<br/>Flask + WebSocket]
+            
+            subgraph "ECS Service - Transcriber 接收器"
+                T1[Task 1<br/>Flask - 接收segments]
+                T2[Task 2<br/>Flask - 接收segments]
+                T3[Task 3<br/>Flask - 接收segments]
             end
             
-            subgraph "ECS Service - WebSocket 推送器"
-                WS1[Task 1<br/>WebSocket Server]
-                WS2[Task 2<br/>WebSocket Server]
-                WS3[Task 3<br/>WebSocket Server]
+            subgraph "ECS Service - MWS Service"
+                M1[Task 1<br/>WebSocket Server]
+                M2[Task 2<br/>WebSocket Server]
+                M3[Task 3<br/>WebSocket Server]
+            end
+            
+            subgraph "ECS Service - AI Intent"
+                A1[Task 1<br/>意圖分析]
+                A2[Task 2<br/>意圖分析]
+                A3[Task 3<br/>意圖分析]
+            end
+            
+            subgraph "ECS Service - Kafka Ingestion"
+                I1[Task 1<br/>Kafka Consumer]
+                I2[Task 2<br/>Kafka Consumer]
+                I3[Task 3<br/>Kafka Consumer]
             end
         end
         
-        Redis[(AWS ElastiCache<br/>Redis)]
+        Redis[(AWS ElastiCache Redis)]
         
-        subgraph "消費者 / 訊息佇列"
-            UI1[UI 客戶端 1<br/>即時顯示]
-            UI2[UI 客戶端 2<br/>即時顯示]
-            AI[AI 意圖分析服務]
-            Kafka[MSK - Kafka 集群<br/>訊息佇列]
+        subgraph "訊息佇列"
+            Kafka[MSK Kafka 集群]
         end
         
-        DB[(長期資料庫<br/>PostgreSQL/MySQL)]
+        subgraph "消費者"
+            UI1[UI 客戶端 1]
+            UI2[UI 客戶端 2]
+        end
         
-        subgraph "AWS 管理服務"
-            CW[CloudWatch<br/>監控告警]
-            ECR[ECR<br/>容器映像檔]
+        DB[(長期資料庫)]
+        
+        subgraph "AWS 管理"
+            CW[CloudWatch]
+            ECR[ECR]
         end
     end
     
-    %% 資料流向
-    STT -- "1. RESTful POST<br/>(每個segment)" --> ALB
-    ALB -- "2. 輪詢分發" --> Server1
-    ALB -- "2. 輪詢分發" --> Server2
-    ALB -- "2. 輪詢分發" --> Server3
+    %% 主要流向 - 垂直排列
+    STT --> ALB
+    ALB --> T1 & T2 & T3
     
-    Server1 -- "3. 寫入即時狀態" --> Redis
-    Server2 -- "3. 寫入即時狀態" --> Redis
-    Server3 -- "3. 寫入即時狀態" --> Redis
+    T1 & T2 & T3 --> Redis
+    T1 & T2 & T3 --> Kafka
     
-    Server1 -- "4. 發送訊息佇列" --> Kafka
-    Server2 -- "4. 發送訊息佇列" --> Kafka
-    Server3 -- "4. 發送訊息佇列" --> Kafka
+    Redis --> M1 & M2 & M3
+    M1 & M2 & M3 --> UI1 & UI2
     
-    Redis -- "5. Pub/Sub 推送" --> WS1
-    Redis -- "5. Pub/Sub 推送" --> WS2
-    Redis -- "5. Pub/Sub 推送" --> WS3
+    A1 & A2 & A3 --> Redis
+    A1 & A2 & A3 --> Kafka
     
-    WS1 -- "6. WebSocket 推送" --> UI1
-    WS2 -- "6. WebSocket 推送" --> UI2
-    WS3 -- "6. WebSocket 推送" --> UI1
-    WS3 -- "6. WebSocket 推送" --> UI2
+    Redis --> M1 & M2 & M3
+    M1 & M2 & M3 --> UI1 & UI2
     
-    Server1 -- "7. 儲存意圖結果" --> Redis
-    Server2 -- "7. 儲存意圖結果" --> Redis
-    Server3 -- "7. 儲存意圖結果" --> Redis
+    Kafka --> I1 & I2 & I3
+    Kafka --> A1 & A2 & A3
     
-    AI -- "8. 查詢即時意圖" --> Redis
-    AI -- "9. 批量消費<br/>完整通話資料" --> Kafka
-    AI -- "10. 寫入分析結果" --> DB
+    I1 & I2 & I3 --> DB
     
-    Kafka -- "11. 資料歸檔" --> DB
+    %% 監控
+    T1 & T2 & T3 --> CW
+    M1 & M2 & M3 --> CW
+    A1 & A2 & A3 --> CW
+    I1 & I2 & I3 --> CW
     
-    %% 監控與部署
-    Server1 --> CW
-    Server2 --> CW
-    Server3 --> CW
-    WS1 --> CW
-    WS2 --> CW
-    WS3 --> CW
-    
-    ECR --> Server1
-    ECR --> Server2
-    ECR --> Server3
-    ECR --> WS1
-    ECR --> WS2
-    ECR --> WS3
+    ECR --> T1 & T2 & T3
+    ECR --> M1 & M2 & M3
+    ECR --> A1 & A2 & A3
+    ECR --> I1 & I2 & I3
     
     style STT fill:#f9f,stroke:#333,stroke-width:2px
     style Redis fill:#f96,stroke:#333,stroke-width:2px
@@ -172,7 +171,7 @@ graph TB
     style ALB fill:#6c9,stroke:#333,stroke-width:2px
     style ECS fill:#fc3,stroke:#333,stroke-width:2px
     style CW fill:#9c9,stroke:#333,stroke-width:2px
-    style Kafka fill:#9cf,stroke:#333,stroke-width:2px
+    style Kafka fill:#9cf,stroke:#333,stroke-width:4px
 ```
 
 ### 資料流程順序圖
