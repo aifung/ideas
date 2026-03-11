@@ -773,17 +773,17 @@ graph TB
             end
             
             subgraph "私有子網 A"
-                Server1[EC2 - 伺服器 1<br/>Flask + Socket.IO]
+                Server1[ECS - 伺服器 1<br/>Flask + Socket.IO]
                 Redis1[ElastiCache<br/>Redis 主節點]
             end
             
             subgraph "私有子網 B"
-                Server2[EC2 - 伺服器 2<br/>Flask + Socket.IO]
+                Server2[ECS - 伺服器 2<br/>Flask + Socket.IO]
                 Redis2[ElastiCache<br/>Redis 備份節點]
             end
             
             subgraph "私有子網 C"
-                Server3[EC2 - 伺服器 3<br/>Flask + Socket.IO]
+                Server3[ECS - 伺服器 3<br/>Flask + Socket.IO]
             end
             
             subgraph "Kafka 集群"
@@ -955,5 +955,6 @@ flowchart TD
 - ✅ **可擴展**：ALB + 無狀態設計 + Redis 共享
 - ✅ **順序性**：Kafka key 設計 + Redis List
 - ✅ **簡單**：元件各司其職，清晰易懂
+
 
 需要調整或補充任何部分嗎？
