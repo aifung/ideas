@@ -86,23 +86,35 @@ graph TB
     subgraph "AWS 雲端"
         ALB[AWS ALB<br/>負載均衡器]
         
-        subgraph "接收伺服器集群"
-            Server1[伺服器 A<br/>Flask + WebSocket]
-            Server2[伺服器 B<br/>Flask + WebSocket]
-            Server3[伺服器 C<br/>Flask + WebSocket]
+        subgraph "AWS ECS Cluster"
+            direction TB
+            subgraph "ECS Service - 接收伺服器"
+                Server1[Task 1<br/>Flask + WebSocket]
+                Server2[Task 2<br/>Flask + WebSocket]
+                Server3[Task 3<br/>Flask + WebSocket]
+            end
+            
+            subgraph "ECS Service - WebSocket 推送器"
+                WS1[Task 1<br/>WebSocket Server]
+                WS2[Task 2<br/>WebSocket Server]
+                WS3[Task 3<br/>WebSocket Server]
+            end
         end
         
         Redis[(AWS ElastiCache<br/>Redis)]
         
-        subgraph "長期儲存"
-            Kafka[Kafka 集群]
-        end
-        
-        subgraph "消費者"
+        subgraph "消費者 / 訊息佇列"
             UI1[UI 客戶端 1<br/>即時顯示]
             UI2[UI 客戶端 2<br/>即時顯示]
             AI[AI 意圖分析服務]
-            DB[(長期資料庫)]
+            Kafka[MSK - Kafka 集群<br/>訊息佇列]
+        end
+        
+        DB[(長期資料庫<br/>PostgreSQL/MySQL)]
+        
+        subgraph "AWS 管理服務"
+            CW[CloudWatch<br/>監控告警]
+            ECR[ECR<br/>容器映像檔]
         end
     end
     
@@ -116,24 +128,51 @@ graph TB
     Server2 -- "3. 寫入即時狀態" --> Redis
     Server3 -- "3. 寫入即時狀態" --> Redis
     
-    Server1 -- "4. 發送長期儲存" --> Kafka
-    Server2 -- "4. 發送長期儲存" --> Kafka
-    Server3 -- "4. 發送長期儲存" --> Kafka
+    Server1 -- "4. 發送訊息佇列" --> Kafka
+    Server2 -- "4. 發送訊息佇列" --> Kafka
+    Server3 -- "4. 發送訊息佇列" --> Kafka
     
-    Redis -- "5. Pub/Sub 推送" --> Server1
-    Redis -- "5. Pub/Sub 推送" --> Server2
-    Redis -- "5. Pub/Sub 推送" --> Server3
+    Redis -- "5. Pub/Sub 推送" --> WS1
+    Redis -- "5. Pub/Sub 推送" --> WS2
+    Redis -- "5. Pub/Sub 推送" --> WS3
     
-    Server1 -- "6. WebSocket 推送" --> UI1
-    Server2 -- "6. WebSocket 推送" --> UI2
-    Server3 -- "6. REST API 查詢" --> AI
+    WS1 -- "6. WebSocket 推送" --> UI1
+    WS2 -- "6. WebSocket 推送" --> UI2
+    WS3 -- "6. WebSocket 推送" --> UI1
+    WS3 -- "6. WebSocket 推送" --> UI2
     
-    Kafka -- "7. 批量消費" --> DB
+    Server1 -- "7. 儲存意圖結果" --> Redis
+    Server2 -- "7. 儲存意圖結果" --> Redis
+    Server3 -- "7. 儲存意圖結果" --> Redis
+    
+    AI -- "8. 查詢即時意圖" --> Redis
+    AI -- "9. 批量消費<br/>完整通話資料" --> Kafka
+    AI -- "10. 寫入分析結果" --> DB
+    
+    Kafka -- "11. 資料歸檔" --> DB
+    
+    %% 監控與部署
+    Server1 --> CW
+    Server2 --> CW
+    Server3 --> CW
+    WS1 --> CW
+    WS2 --> CW
+    WS3 --> CW
+    
+    ECR --> Server1
+    ECR --> Server2
+    ECR --> Server3
+    ECR --> WS1
+    ECR --> WS2
+    ECR --> WS3
     
     style STT fill:#f9f,stroke:#333,stroke-width:2px
     style Redis fill:#f96,stroke:#333,stroke-width:2px
-    style Kafka fill:#9cf,stroke:#333,stroke-width:2px
+    style DB fill:#c9f,stroke:#333,stroke-width:4px
     style ALB fill:#6c9,stroke:#333,stroke-width:2px
+    style ECS fill:#fc3,stroke:#333,stroke-width:2px
+    style CW fill:#9c9,stroke:#333,stroke-width:2px
+    style Kafka fill:#9cf,stroke:#333,stroke-width:2px
 ```
 
 ### 資料流程順序圖
@@ -467,100 +506,37 @@ graph LR
 
 ```mermaid
 graph TB
-    subgraph "資料來源"
-        STT[語音轉文字伺服器]
+    subgraph "語音伺服器"
+        STT[語音轉文字]
     end
     
-    subgraph "AWS 雲端"
-        ALB[AWS ALB<br/>負載均衡器]
-        
-        subgraph "AWS ECS Cluster"
-            direction TB
-            subgraph "ECS Service - 接收伺服器"
-                Server1[Task 1<br/>Flask + WebSocket]
-                Server2[Task 2<br/>Flask + WebSocket]
-                Server3[Task 3<br/>Flask + WebSocket]
-            end
-            
-            subgraph "ECS Service - WebSocket 推送器"
-                WS1[Task 1<br/>WebSocket Server]
-                WS2[Task 2<br/>WebSocket Server]
-                WS3[Task 3<br/>WebSocket Server]
-            end
-        end
-        
-        Redis[(AWS ElastiCache<br/>Redis)]
-        
-        subgraph "消費者 / 訊息佇列"
-            UI1[UI 客戶端 1<br/>即時顯示]
-            UI2[UI 客戶端 2<br/>即時顯示]
-            AI[AI 意圖分析服務]
-            Kafka[MSK - Kafka 集群<br/>訊息佇列]
-        end
-        
-        DB[(長期資料庫<br/>PostgreSQL/MySQL)]
-        
-        subgraph "AWS 管理服務"
-            CW[CloudWatch<br/>監控告警]
-            ECR[ECR<br/>容器映像檔]
-        end
+    subgraph "後端"
+        API[API 接收端]
+        Redis[(Redis<br/>Pub/Sub)]
+        WS1[WebSocket Server 1]
+        WS2[WebSocket Server 2]
     end
     
-    %% 資料流向
-    STT -- "1. RESTful POST<br/>(每個segment)" --> ALB
-    ALB -- "2. 輪詢分發" --> Server1
-    ALB -- "2. 輪詢分發" --> Server2
-    ALB -- "2. 輪詢分發" --> Server3
+    subgraph "前端"
+        UI1[UI 客戶端 1<br/>客服A]
+        UI2[UI 客戶端 2<br/>客服B]
+        UI3[UI 客戶端 3<br/>管理員]
+    end
     
-    Server1 -- "3. 寫入即時狀態" --> Redis
-    Server2 -- "3. 寫入即時狀態" --> Redis
-    Server3 -- "3. 寫入即時狀態" --> Redis
+    STT -- "1. POST segment" --> API
+    API -- "2. 寫入資料" --> Redis
+    API -- "3. 發布更新" --> Redis
     
-    Server1 -- "4. 發送訊息佇列" --> Kafka
-    Server2 -- "4. 發送訊息佇列" --> Kafka
-    Server3 -- "4. 發送訊息佇列" --> Kafka
+    Redis -- "4. 推送更新" --> WS1
+    Redis -- "4. 推送更新" --> WS2
     
-    Redis -- "5. Pub/Sub 推送" --> WS1
-    Redis -- "5. Pub/Sub 推送" --> WS2
-    Redis -- "5. Pub/Sub 推送" --> WS3
+    WS1 -- "5. WebSocket" --> UI1
+    WS1 -- "5. WebSocket" --> UI2
+    WS2 -- "5. WebSocket" --> UI3
     
-    WS1 -- "6. WebSocket 推送" --> UI1
-    WS2 -- "6. WebSocket 推送" --> UI2
-    WS3 -- "6. WebSocket 推送" --> UI1
-    WS3 -- "6. WebSocket 推送" --> UI2
-    
-    Server1 -- "7. 儲存意圖結果" --> Redis
-    Server2 -- "7. 儲存意圖結果" --> Redis
-    Server3 -- "7. 儲存意圖結果" --> Redis
-    
-    AI -- "8. 查詢即時意圖" --> Redis
-    AI -- "9. 批量消費<br/>完整通話資料" --> Kafka
-    AI -- "10. 寫入分析結果" --> DB
-    
-    Kafka -- "11. 資料歸檔" --> DB
-    
-    %% 監控與部署
-    Server1 --> CW
-    Server2 --> CW
-    Server3 --> CW
-    WS1 --> CW
-    WS2 --> CW
-    WS3 --> CW
-    
-    ECR --> Server1
-    ECR --> Server2
-    ECR --> Server3
-    ECR --> WS1
-    ECR --> WS2
-    ECR --> WS3
-    
-    style STT fill:#f9f,stroke:#333,stroke-width:2px
-    style Redis fill:#f96,stroke:#333,stroke-width:2px
-    style DB fill:#c9f,stroke:#333,stroke-width:4px
-    style ALB fill:#6c9,stroke:#333,stroke-width:2px
-    style ECS fill:#fc3,stroke:#333,stroke-width:2px
-    style CW fill:#9c9,stroke:#333,stroke-width:2px
-    style Kafka fill:#9cf,stroke:#333,stroke-width:2px
+    UI1 -- "6. join_session(call_123)" --> WS1
+    UI2 -- "6. join_session(call_123)" --> WS1
+    UI3 -- "6. join_session(call_456)" --> WS2
 ```
 
 ### 前端 UI 程式碼
@@ -836,17 +812,17 @@ graph TB
             end
             
             subgraph "私有子網 A"
-                Server1[ECS - 伺服器 1<br/>Flask + Socket.IO]
+                Server1[EC2 - 伺服器 1<br/>Flask + Socket.IO]
                 Redis1[ElastiCache<br/>Redis 主節點]
             end
             
             subgraph "私有子網 B"
-                Server2[ECS - 伺服器 2<br/>Flask + Socket.IO]
+                Server2[EC2 - 伺服器 2<br/>Flask + Socket.IO]
                 Redis2[ElastiCache<br/>Redis 備份節點]
             end
             
             subgraph "私有子網 C"
-                Server3[ECS - 伺服器 3<br/>Flask + Socket.IO]
+                Server3[EC2 - 伺服器 3<br/>Flask + Socket.IO]
             end
             
             subgraph "Kafka 集群"
@@ -1019,6 +995,4 @@ flowchart TD
 - ✅ **順序性**：Kafka key 設計 + Redis List
 - ✅ **簡單**：元件各司其職，清晰易懂
 
-
 需要調整或補充任何部分嗎？
-
