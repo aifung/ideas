@@ -467,37 +467,100 @@ graph LR
 
 ```mermaid
 graph TB
-    subgraph "語音伺服器"
-        STT[語音轉文字]
+    subgraph "資料來源"
+        STT[語音轉文字伺服器]
     end
     
-    subgraph "後端"
-        API[API 接收端]
-        Redis[(Redis<br/>Pub/Sub)]
-        WS1[WebSocket Server 1]
-        WS2[WebSocket Server 2]
+    subgraph "AWS 雲端"
+        ALB[AWS ALB<br/>負載均衡器]
+        
+        subgraph "AWS ECS Cluster"
+            direction TB
+            subgraph "ECS Service - 接收伺服器"
+                Server1[Task 1<br/>Flask + WebSocket]
+                Server2[Task 2<br/>Flask + WebSocket]
+                Server3[Task 3<br/>Flask + WebSocket]
+            end
+            
+            subgraph "ECS Service - WebSocket 推送器"
+                WS1[Task 1<br/>WebSocket Server]
+                WS2[Task 2<br/>WebSocket Server]
+                WS3[Task 3<br/>WebSocket Server]
+            end
+        end
+        
+        Redis[(AWS ElastiCache<br/>Redis)]
+        
+        subgraph "消費者 / 訊息佇列"
+            UI1[UI 客戶端 1<br/>即時顯示]
+            UI2[UI 客戶端 2<br/>即時顯示]
+            AI[AI 意圖分析服務]
+            Kafka[MSK - Kafka 集群<br/>訊息佇列]
+        end
+        
+        DB[(長期資料庫<br/>PostgreSQL/MySQL)]
+        
+        subgraph "AWS 管理服務"
+            CW[CloudWatch<br/>監控告警]
+            ECR[ECR<br/>容器映像檔]
+        end
     end
     
-    subgraph "前端"
-        UI1[UI 客戶端 1<br/>客服A]
-        UI2[UI 客戶端 2<br/>客服B]
-        UI3[UI 客戶端 3<br/>管理員]
-    end
+    %% 資料流向
+    STT -- "1. RESTful POST<br/>(每個segment)" --> ALB
+    ALB -- "2. 輪詢分發" --> Server1
+    ALB -- "2. 輪詢分發" --> Server2
+    ALB -- "2. 輪詢分發" --> Server3
     
-    STT -- "1. POST segment" --> API
-    API -- "2. 寫入資料" --> Redis
-    API -- "3. 發布更新" --> Redis
+    Server1 -- "3. 寫入即時狀態" --> Redis
+    Server2 -- "3. 寫入即時狀態" --> Redis
+    Server3 -- "3. 寫入即時狀態" --> Redis
     
-    Redis -- "4. 推送更新" --> WS1
-    Redis -- "4. 推送更新" --> WS2
+    Server1 -- "4. 發送訊息佇列" --> Kafka
+    Server2 -- "4. 發送訊息佇列" --> Kafka
+    Server3 -- "4. 發送訊息佇列" --> Kafka
     
-    WS1 -- "5. WebSocket" --> UI1
-    WS1 -- "5. WebSocket" --> UI2
-    WS2 -- "5. WebSocket" --> UI3
+    Redis -- "5. Pub/Sub 推送" --> WS1
+    Redis -- "5. Pub/Sub 推送" --> WS2
+    Redis -- "5. Pub/Sub 推送" --> WS3
     
-    UI1 -- "6. join_session(call_123)" --> WS1
-    UI2 -- "6. join_session(call_123)" --> WS1
-    UI3 -- "6. join_session(call_456)" --> WS2
+    WS1 -- "6. WebSocket 推送" --> UI1
+    WS2 -- "6. WebSocket 推送" --> UI2
+    WS3 -- "6. WebSocket 推送" --> UI1
+    WS3 -- "6. WebSocket 推送" --> UI2
+    
+    Server1 -- "7. 儲存意圖結果" --> Redis
+    Server2 -- "7. 儲存意圖結果" --> Redis
+    Server3 -- "7. 儲存意圖結果" --> Redis
+    
+    AI -- "8. 查詢即時意圖" --> Redis
+    AI -- "9. 批量消費<br/>完整通話資料" --> Kafka
+    AI -- "10. 寫入分析結果" --> DB
+    
+    Kafka -- "11. 資料歸檔" --> DB
+    
+    %% 監控與部署
+    Server1 --> CW
+    Server2 --> CW
+    Server3 --> CW
+    WS1 --> CW
+    WS2 --> CW
+    WS3 --> CW
+    
+    ECR --> Server1
+    ECR --> Server2
+    ECR --> Server3
+    ECR --> WS1
+    ECR --> WS2
+    ECR --> WS3
+    
+    style STT fill:#f9f,stroke:#333,stroke-width:2px
+    style Redis fill:#f96,stroke:#333,stroke-width:2px
+    style DB fill:#c9f,stroke:#333,stroke-width:4px
+    style ALB fill:#6c9,stroke:#333,stroke-width:2px
+    style ECS fill:#fc3,stroke:#333,stroke-width:2px
+    style CW fill:#9c9,stroke:#333,stroke-width:2px
+    style Kafka fill:#9cf,stroke:#333,stroke-width:2px
 ```
 
 ### 前端 UI 程式碼
@@ -958,3 +1021,4 @@ flowchart TD
 
 
 需要調整或補充任何部分嗎？
+
